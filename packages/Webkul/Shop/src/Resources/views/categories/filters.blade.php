@@ -514,6 +514,7 @@
                         params: {
                             page: this.currentPage,
                             search: this.searchQuery,
+                            category_id: "{{ isset($category) ? $category->id : '' }}",
                         }
                     })
                     .then(response => {
