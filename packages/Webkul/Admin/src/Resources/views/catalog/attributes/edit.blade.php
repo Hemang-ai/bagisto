@@ -106,6 +106,18 @@
                         class="box-shadow rounded bg-white p-4 dark:bg-gray-900 {{ in_array($attribute->type, ['select', 'multiselect', 'checkbox']) ?: 'hidden' }}"
                         v-if="showSwatch"
                     >
+                        <!--
+                            Total number of options the browser is about to submit, emitted
+                            early in the form so it survives PHP's `max_input_vars` truncation
+                            even when the full `options[...]` payload below does not (see
+                            `AttributeController::guardAgainstTruncatedOptionsPayload()`).
+                        -->
+                        <input
+                            type="hidden"
+                            name="options_count"
+                            :value="optionsData.length"
+                        />
+
                         <div class="mb-3 flex items-center justify-between">
                             <p class="mb-4 text-base font-semibold text-gray-800 dark:text-white">
                                 @lang('admin::app.catalog.attributes.edit.options')
