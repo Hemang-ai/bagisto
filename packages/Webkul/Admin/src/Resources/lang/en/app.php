@@ -1921,6 +1921,7 @@ return [
             'create-success' => 'Attribute Created Successfully',
             'delete-failed' => 'Attribute Deleted Failed',
             'delete-success' => 'Attribute Deleted Successfully',
+            'options-truncated-error' => 'Only :received of :expected options were received by the server and none were saved. Your browser sent too many form fields in one request (PHP\'s max_input_vars limit is :max_input_vars). Ask your host to raise max_input_vars in php.ini, or reduce the number of options and save in smaller batches.',
             'update-success' => 'Attribute Updated Successfully',
             'user-define-error' => 'Can not delete system Attribute',
         ],
