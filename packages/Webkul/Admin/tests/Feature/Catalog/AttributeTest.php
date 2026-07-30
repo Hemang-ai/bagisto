@@ -134,6 +134,71 @@ it('should update an attribute', function () {
     ]);
 });
 
+it('should reject an attribute update whose options payload looks truncated', function () {
+    // Arrange.
+    $attribute = Attribute::factory()->create();
+
+    $originalAdminName = $attribute->admin_name;
+
+    // Act and Assert: the browser says it tried to send 50 options, but only
+    // 2 actually arrived -- this is exactly what PHP's max_input_vars
+    // truncation looks like from the server's point of view.
+    $this->loginAsAdmin();
+
+    putJson(route('admin.catalog.attributes.update', $attribute->id), [
+        'admin_name' => fake()->name(),
+        'code' => $attribute->code,
+        'type' => $attribute->type,
+        'default_value' => 1,
+        'options_count' => 50,
+        'options' => [
+            1 => ['admin_name' => 'Option One'],
+            2 => ['admin_name' => 'Option Two'],
+        ],
+    ])
+        ->assertJsonValidationErrorFor('options')
+        ->assertUnprocessable();
+
+    // The whole request should be rejected rather than partially saved --
+    // the attribute's admin_name must remain exactly what it was before.
+    $this->assertDatabaseHas('attributes', [
+        'id' => $attribute->id,
+        'admin_name' => $originalAdminName,
+    ]);
+});
+
+it('should allow an attribute update whose options_count matches the received options', function () {
+    // Arrange.
+    $attribute = Attribute::factory()->create();
+
+    // Act and Assert: 2 options were expected and all 2 arrived, so the
+    // truncation guard should not interfere with a normal save.
+    $this->loginAsAdmin();
+
+    putJson(route('admin.catalog.attributes.update', $attribute->id), [
+        'admin_name' => $newAdminName = fake()->name(),
+        'code' => $attribute->code,
+        'type' => $attribute->type,
+        'default_value' => 1,
+        'options_count' => 2,
+        'options' => [
+            1 => ['admin_name' => 'Option One'],
+            2 => ['admin_name' => 'Option Two'],
+        ],
+    ])
+        ->assertRedirectToRoute('admin.catalog.attributes.index')
+        ->isRedirection();
+
+    $this->assertModelWise([
+        Attribute::class => [
+            [
+                'id' => $attribute->id,
+                'admin_name' => $newAdminName,
+            ],
+        ],
+    ]);
+});
+
 it('should destroy an attribute', function () {
     // Arrange.
     $attribute = Attribute::factory()->create();

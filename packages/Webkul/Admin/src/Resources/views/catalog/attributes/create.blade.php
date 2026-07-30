@@ -110,6 +110,18 @@
                             || attributeType == 'checkbox'
                         )"
                     >
+                        <!--
+                            Total number of options the browser is about to submit, emitted
+                            early in the form so it survives PHP's `max_input_vars` truncation
+                            even when the full `options[...]` payload below does not (see
+                            `AttributeController::guardAgainstTruncatedOptionsPayload()`).
+                        -->
+                        <input
+                            type="hidden"
+                            name="options_count"
+                            :value="options.length"
+                        />
+
                         <div class="mb-3 flex items-center justify-between">
                             <p class="mb-4 text-base font-semibold text-gray-800 dark:text-white">
                                 @lang('admin::app.catalog.attributes.create.options')
