@@ -5,6 +5,7 @@ namespace Webkul\Admin\Http\Controllers\Catalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Webkul\Admin\DataGrids\Catalog\AttributeDataGrid;
 use Webkul\Admin\Http\Controllers\Controller;
@@ -79,6 +80,8 @@ class AttributeController extends Controller
 
         $this->validate(request(), $rules);
 
+        $this->guardAgainstTruncatedOptionsPayload();
+
         $requestData = request()->all();
 
         $requestData['default_value'] ??= null;
@@ -145,6 +148,8 @@ class AttributeController extends Controller
 
         $this->validate(request(), $rules);
 
+        $this->guardAgainstTruncatedOptionsPayload();
+
         $requestData = request()->all();
 
         $requestData['default_value'] ??= null;
@@ -158,6 +163,48 @@ class AttributeController extends Controller
         session()->flash('success', trans('admin::app.catalog.attributes.update-success'));
 
         return redirect()->route('admin.catalog.attributes.index');
+    }
+
+    /**
+     * Attributes with a large number of options (a "Brand" attribute with hundreds of
+     * values is a common real-world case) render one or more hidden `<input>` fields
+     * per option, per locale. Once the total number of individual form fields exceeds
+     * PHP's `max_input_vars` directive (1000 by default), PHP silently drops the
+     * remaining fields while parsing the request -- before Laravel, our validation
+     * rules, or this controller ever see the data. The save then "succeeds" against a
+     * truncated payload, silently discarding whichever options landed past the cutoff.
+     *
+     * We can't detect this from `$_POST` alone, since a genuinely small options list
+     * looks identical to a truncated one. Instead, the options table view emits an
+     * `options_count` hidden field early in the form (before the bulk of the
+     * `options[...]` fields), so it reliably survives truncation and tells us how many
+     * options the browser actually tried to send. If the number of options Laravel
+     * received doesn't match, we know the request was truncated and fail loudly with
+     * an actionable error instead of silently saving partial data.
+     */
+    protected function guardAgainstTruncatedOptionsPayload(): void
+    {
+        $expectedOptionsCount = request('options_count');
+
+        if ($expectedOptionsCount === null || $expectedOptionsCount === '') {
+            return;
+        }
+
+        $receivedOptionsCount = count(request('options', []));
+
+        if ((int) $expectedOptionsCount <= $receivedOptionsCount) {
+            return;
+        }
+
+        $maxInputVars = ini_get('max_input_vars');
+
+        throw ValidationException::withMessages([
+            'options' => trans('admin::app.catalog.attributes.options-truncated-error', [
+                'expected' => $expectedOptionsCount,
+                'received' => $receivedOptionsCount,
+                'max_input_vars' => $maxInputVars,
+            ]),
+        ]);
     }
 
     /**
