@@ -2,9 +2,12 @@
 
 namespace Webkul\Shop\Http\Controllers\API;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\DB;
 use Webkul\Attribute\Enums\AttributeTypeEnum;
+use Webkul\Attribute\Models\Attribute;
 use Webkul\Attribute\Repositories\AttributeRepository;
 use Webkul\Category\Repositories\CategoryRepository;
 use Webkul\Product\Repositories\ProductRepository;
@@ -112,9 +115,55 @@ class CategoryController extends APIController
             });
         }
 
+        $this->scopeOptionsToProductsInCategory($query, $attribute, request('category_id'));
+
         $query->orderBy('sort_order');
 
         return AttributeOptionResource::collection($query->paginate());
+    }
+
+    /**
+     * Restrict a filterable attribute's options to only the ones actually
+     * assigned to at least one product within the given category.
+     *
+     * Without this, a filter such as "Brand" lists every brand that has ever
+     * been created store-wide, even when browsing a category whose products
+     * only use two or three of them -- customers can select a brand filter
+     * that is guaranteed to return zero results.
+     *
+     * No-op when the attribute isn't option-based (select/multiselect) or
+     * when no category is given, so this keeps the previous global-options
+     * behavior for the "shop all attributes" listing (`getAttributes()`
+     * without a `category_id`) and for the price-range and other non-option
+     * filters.
+     */
+    protected function scopeOptionsToProductsInCategory(Builder $query, Attribute $attribute, $categoryId): void
+    {
+        if (! $categoryId) {
+            return;
+        }
+
+        if (! in_array($attribute->type, [
+            AttributeTypeEnum::SELECT->value,
+            AttributeTypeEnum::MULTISELECT->value,
+        ])) {
+            return;
+        }
+
+        $isMultiselect = $attribute->type === AttributeTypeEnum::MULTISELECT->value;
+
+        $query->whereExists(function ($subQuery) use ($attribute, $categoryId, $isMultiselect) {
+            $subQuery->select(DB::raw(1))
+                ->from('product_attribute_values')
+                ->join('product_categories', 'product_categories.product_id', '=', 'product_attribute_values.product_id')
+                ->where('product_attribute_values.attribute_id', $attribute->id)
+                ->where('product_categories.category_id', $categoryId)
+                ->when(
+                    $isMultiselect,
+                    fn ($query) => $query->whereRaw('find_in_set(attribute_options.id, product_attribute_values.text_value)'),
+                    fn ($query) => $query->whereColumn('product_attribute_values.integer_value', 'attribute_options.id')
+                );
+        });
     }
 
     /**
